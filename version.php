@@ -24,6 +24,9 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2016042600;
-$plugin->requires  = 2016042200;
+$plugin->version   = 2016050900;
+$plugin->requires  = 2013111800;
 $plugin->component = 'quizaccess_offlineattempts';
+$plugin->dependencies = array(
+    'local_mobile' => 2014060325
+);

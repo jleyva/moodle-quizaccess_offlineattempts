@@ -32,7 +32,6 @@ require_once($CFG->dirroot . '/mod/quiz/accessrule/accessrulebase.php');
  *
  * @copyright  Juan Leyva
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since      Moodle 3.1
  */
 class quizaccess_offlineattempts extends quiz_access_rule_base {
 
@@ -48,13 +47,13 @@ class quizaccess_offlineattempts extends quiz_access_rule_base {
     }
 
     public function is_preflight_check_required($attemptid) {
-        global $SESSION;
+        global $SESSION, $DB;
 
         // First, check if the user did something offline.
         if (!empty($attemptid)) {
-            $attemptobj = quiz_attempt::create($attemptid);
-            $attempt = $attemptobj->get_attempt();
-            if (empty($attempt->timemodifiedoffline)) {
+            $conditions = array('attemptid' => $attemptid);
+            $timemodifiedoffline = $DB->get_field('quizaccess_offlineattempts_a', 'timemodifiedoffline', $conditions);
+            if (empty($timemodifiedoffline)) {
                 return false;
             }
             return empty($SESSION->offlineattemptscheckedquizzes[$this->quiz->id]);
@@ -66,16 +65,20 @@ class quizaccess_offlineattempts extends quiz_access_rule_base {
 
     public function add_preflight_check_form_fields(mod_quiz_preflight_check_form $quizform,
             MoodleQuickForm $mform, $attemptid) {
+        global $DB;
 
-        $attemptobj = quiz_attempt::create($attemptid);
-        $attempt = $attemptobj->get_attempt();
-        $lasttime = format_time(time() - $attempt->timemodifiedoffline);
+        $conditions = array('attemptid' => $attemptid);
+        $timemodifiedoffline = $DB->get_field('quizaccess_offlineattempts_a', 'timemodifiedoffline', $conditions);
 
-        $mform->addElement('header', 'offlineattemptsheader', get_string('mobileapp', 'quizaccess_offlineattempts'));
-        $mform->addElement('static', 'offlinedatamessage', '',
-                get_string('offlinedatamessage', 'quizaccess_offlineattempts', $lasttime));
-        $mform->addElement('advcheckbox', 'confirmdatasaved', null,
-                get_string('confirmdatasaved', 'quizaccess_offlineattempts'));
+        if ($timemodifiedoffline) {
+            $lasttime = format_time(time() - $timemodifiedoffline);
+
+            $mform->addElement('header', 'offlineattemptsheader', get_string('mobileapp', 'quizaccess_offlineattempts'));
+            $mform->addElement('static', 'offlinedatamessage', '',
+                    get_string('offlinedatamessage', 'quizaccess_offlineattempts', $lasttime));
+            $mform->addElement('advcheckbox', 'confirmdatasaved', null,
+                    get_string('confirmdatasaved', 'quizaccess_offlineattempts'));
+        }
     }
 
     public function validate_preflight_check($data, $files, $errors, $attemptid) {
@@ -135,4 +138,31 @@ class quizaccess_offlineattempts extends quiz_access_rule_base {
 
         return $errors;
     }
+
+    public static function save_settings($quiz) {
+        global $DB;
+        if (empty($quiz->allowofflineattempts)) {
+            $DB->delete_records('quizaccess_offlineattempts', array('quizid' => $quiz->id));
+        } else {
+            if (!$DB->record_exists('quizaccess_offlineattempts', array('quizid' => $quiz->id))) {
+                $record = new stdClass();
+                $record->quizid = $quiz->id;
+                $record->allowofflineattempts = 1;
+                $DB->insert_record('quizaccess_offlineattempts', $record);
+            }
+        }
+    }
+
+    public static function delete_settings($quiz) {
+        global $DB;
+        $DB->delete_records('quizaccess_offlineattempts', array('quizid' => $quiz->id));
+    }
+
+    public static function get_settings_sql($quizid) {
+        return array(
+            'allowofflineattempts',
+            'LEFT JOIN {quizaccess_offlineattempts} offlineattempts ON offlineattempts.quizid = quiz.id',
+            array());
+    }
+
 }
